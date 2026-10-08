@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BonKit #2 — NOON</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #07080c; color: #f4f0e6; }
+  body { display: grid; place-items: center; padding: 12px; font: 16px/1.4 "Avenir Next", "Segoe UI", sans-serif; }
+  .shell {
+    width: min(640px, 100%);
+    max-width: 100%;
+    min-width: 0;
+    border-radius: 36px;
+    padding: 22px 22px 16px;
+    position: relative;
+    box-shadow: 0 24px 60px rgba(0,0,0,.45), inset 0 0 0 2px rgba(255,255,255,.2);
+  }
+  .shell.neon, .shell.ray {
+    box-shadow: 0 24px 60px rgba(0,0,0,.45), inset 0 0 0 3px var(--rim), 0 0 36px var(--glow);
+  }
+  .shell::before, .shell::after, .screw-a, .screw-b {
+    content: "";
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #eee, #666 45%, #111 70%);
+  }
+  .shell::before { top: 14px; left: 16px; }
+  .shell::after { top: 14px; right: 16px; }
+  .screw-a { bottom: 14px; left: 16px; }
+  .screw-b { bottom: 14px; right: 16px; }
+  .toprow { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 8px 14px; }
+  .lamp { width: 22px; height: 22px; border-radius: 50%; background: #1a1a1a; box-shadow: inset 0 0 0 2px rgba(0,0,0,.6); flex: none; }
+  .shell.hot .lamp { background: var(--hot); box-shadow: 0 0 18px var(--hot); }
+  .nameplate {
+    font: 800 20px/1.1 Impact, "Arial Black", sans-serif;
+    letter-spacing: 0.08em;
+    color: var(--plate-ink);
+    background: var(--plate);
+    padding: 6px 12px;
+    border-radius: 8px;
+    text-align: right;
+  }
+  .deck { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; background: rgba(0,0,0,.72); border-radius: 22px; padding: 14px; min-width: 0; }
+  .toprow, .foot, .nameplate { min-width: 0; }
+  .deck button {
+    min-height: 84px;
+    min-width: 0;
+    border: 0;
+    border-radius: 16px;
+    padding: 6px 2px;
+    cursor: pointer;
+    color: var(--ink);
+    background: var(--key);
+    font: 800 13px/1.1 Impact, "Arial Black", sans-serif;
+    letter-spacing: 0.06em;
+    box-shadow: inset 0 -6px 0 rgba(0,0,0,.28), 0 1px 0 rgba(255,255,255,.35);
+  }
+  .deck button small {
+    display: block;
+    margin-top: 4px;
+    font: 700 10px/1.2 "Avenir Next", "Segoe UI", sans-serif;
+    letter-spacing: 0.14em;
+    opacity: 0.72;
+  }
+  .deck button.warm { filter: saturate(1.25) brightness(1.18); }
+  .deck button.lit {
+    background: var(--hot);
+    color: var(--hot-ink);
+    transform: translateY(2px);
+    box-shadow: 0 0 22px var(--hot), inset 0 -2px 0 rgba(0,0,0,.25);
+  }
+  .foot { display: flex; justify-content: space-between; align-items: center; margin: 12px 18px 2px; }
+  .grille { height: 22px; flex: 1; margin-right: 12px; border-radius: 8px; background: repeating-linear-gradient(90deg, #111 0 4px, transparent 4px 8px); opacity: .85; }
+  .stamp { font: 800 13px/1 Impact, "Arial Black", sans-serif; letter-spacing: 0.2em; color: #fff; text-shadow: 0 1px 0 #000; }
+  #live { min-height: 1.4em; margin: 14px 0 0; color: #f4f0e6; text-align: center; }
+  button:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+  @media (max-width: 640px) {
+    body { padding: 8px; }
+    .shell { border-radius: 24px; padding: 14px 10px 10px; }
+    .deck { gap: 6px; padding: 10px; }
+    .deck button { min-height: 64px; font-size: 12px; }
+    .nameplate { font-size: 15px; padding: 6px 8px; }
+    .stamp { letter-spacing: 0.08em; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .deck button.lit { transition: none; }
+  }
+</style>
+</head>
+<body>
+<div class="shell" id="shell">
+  <div class="toprow">
+    <div class="lamp" id="lamp"></div>
+    <div class="nameplate" id="plate"></div>
+  </div>
+  <div class="deck" id="deck"></div>
+  <div class="foot">
+    <div class="grille"></div>
+    <div class="stamp" id="stamp"></div>
+  </div>
+  <i class="screw-a"></i><i class="screw-b"></i>
+</div>
+<p id="live" aria-live="polite">Hit a pad.</p>
+<script>
+const LOCK = 1;
+const LOOK = {"n":"NOON","fam":"Sun case","mode":"sun","a":"#ffd23a","b":"#fff6c8","key":"#ffb000","hot":"#fff6c8","plate":"#ffd23a","ang":0,"slice":12,"at":"50% 50%"};
+
+const PADS = [
+  ["KICK", "Q", "Kick"],
+  ["SNARE", "W", "Snare"],
+  ["HAT", "E", "Closed hat"],
+  ["OPEN", "R", "Open hat"],
+  ["CLAP", "A", "Clap"],
+  ["LOW", "S", "Low tom"],
+  ["MID", "D", "Mid tom"],
+  ["HIGH", "F", "High tom"],
+  ["RIM", "Z", "Rim"],
+  ["BELL", "X", "Cowbell"],
+  ["CRASH", "C", "Crash"],
+  ["ZAP", "V", "Zap"]
+];
+const KEYMAP = { q: 0, w: 1, e: 2, r: 3, a: 4, s: 5, d: 6, f: 7, z: 8, x: 9, c: 10, v: 11 };
+const shell = document.getElementById("shell");
+const deck = document.getElementById("deck");
+const plate = document.getElementById("plate");
+const live = document.getElementById("live");
+let kit = tune(LOCK);
+let ctx, master, noiseBuf, nodes = [];
+function tune(i) {
+  return {
+    kick: 142 + (i % 7) * 7,
+    kickEnd: 36 + (i % 5) * 2.5,
+    snare: 168 + (i % 6) * 14,
+    hat: 6800 + (i % 5) * 700,
+    bell: 500 + (i % 8) * 28,
+    tom: 0.92 + (i % 4) * 0.07,
+    zap: 880 + (i % 7) * 90
+  };
+}
+function audio() {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) throw new Error("This browser has no drum engine.");
+  if (!ctx) {
+    ctx = new AC();
+    master = ctx.createGain();
+    master.gain.value = 2.6;
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -2;
+    comp.knee.value = 2;
+    comp.ratio.value = 18;
+    comp.attack.value = 0.001;
+    comp.release.value = 0.06;
+    const n = 1024;
+    const curve = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const x = (i / (n - 1)) * 2 - 1;
+      curve[i] = Math.tanh(x * 2.8);
+    }
+    const clip = ctx.createWaveShaper();
+    clip.curve = curve;
+    clip.oversample = "4x";
+    master.connect(comp).connect(clip).connect(ctx.destination);
+    const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    noiseBuf = buf;
+  }
+  if (ctx.state === "suspended") ctx.resume();
+  return ctx;
+}
+function keep(node) {
+  nodes.push(node);
+  if (nodes.length > 48) {
+    const old = nodes.shift();
+    try { old.stop(); } catch (e) { /* already ended */ }
+  }
+}
+function tone(type, freq, t, dur, peak, endFreq) {
+  const c = audio();
+  const o = c.createOscillator();
+  const g = c.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(Math.max(30, freq), t);
+  if (endFreq) o.frequency.exponentialRampToValueAtTime(Math.max(30, endFreq), t + dur);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(peak, t + Math.min(0.01, dur * 0.2));
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(master);
+  o.start(t);
+  o.stop(t + dur + 0.03);
+  keep(o);
+}
+function burst(t, dur, peak, freq, q, type) {
+  const c = audio();
+  const src = c.createBufferSource();
+  src.buffer = noiseBuf;
+  src.loop = true;
+  const f = c.createBiquadFilter();
+  f.type = type;
+  f.frequency.setValueAtTime(freq, t);
+  f.Q.value = q;
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(peak, t + Math.min(0.008, dur * 0.25));
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(f).connect(g).connect(master);
+  src.start(t);
+  src.stop(t + dur + 0.02);
+  keep(src);
+}
+function voice(i, t) {
+  const k = kit;
+  if (i === 0) {
+    tone("sine", k.kick, t, 0.46, 1, k.kickEnd);
+    tone("sine", k.kick * 0.5, t, 0.22, 0.4, k.kickEnd);
+    burst(t, 0.016, 0.55, 2800, 0.7, "highpass");
+  } else if (i === 1) {
+    burst(t, 0.18, 0.9, 1600 + k.snare * 0.4, 0.85, "bandpass");
+    tone("triangle", k.snare, t, 0.12, 0.5, k.snare * 0.72);
+  } else if (i === 2) {
+    burst(t, 0.032, 0.62, k.hat, 0.7, "highpass");
+  } else if (i === 3) {
+    burst(t, 0.42, 0.5, k.hat * 0.82, 0.45, "highpass");
+  } else if (i === 4) {
+    [0, 0.011, 0.023].forEach((d, n) => burst(t + d, 0.028, 0.7 - n * 0.08, 1100 + k.snare, 0.8, "bandpass"));
+    burst(t + 0.028, 0.16, 0.48, 900, 0.6, "bandpass");
+  } else if (i === 5 || i === 6 || i === 7) {
+    const base = i === 5 ? 108 : i === 6 ? 176 : 268;
+    const f = base * k.tom;
+    tone("sine", f, t, 0.34, 0.86, f * 0.52);
+    burst(t, 0.04, 0.28, f * 3, 1.1, "bandpass");
+  } else if (i === 8) {
+    tone("square", 1040, t, 0.045, 0.55);
+    burst(t, 0.03, 0.5, 1900, 2.4, "bandpass");
+  } else if (i === 9) {
+    tone("square", k.bell, t, 0.3, 0.48);
+    tone("square", k.bell * 1.47, t, 0.24, 0.34);
+  } else if (i === 10) {
+    burst(t, 0.95, 0.58, 5200, 0.45, "highpass");
+    tone("square", 340, t, 0.45, 0.12, 160);
+    tone("square", 510, t, 0.55, 0.08, 190);
+  } else {
+    tone("sawtooth", k.zap, t, 0.2, 0.62, 68);
+    burst(t, 0.08, 0.3, 2600, 0.7, "highpass");
+  }
+}
+function light(btn) {
+  const all = [...deck.children];
+  const i = all.indexOf(btn);
+  all.forEach((n) => n.classList.remove("lit", "warm"));
+  btn.classList.add("lit");
+  [-1, 1, -4, 4].forEach((d) => {
+    const j = i + d;
+    if (j < 0 || j > 11) return;
+    if ((d === -1 || d === 1) && Math.floor(j / 4) !== Math.floor(i / 4)) return;
+    all[j].classList.add("warm");
+  });
+  shell.classList.add("hot");
+  clearTimeout(light.timer);
+  light.timer = setTimeout(() => {
+    all.forEach((n) => n.classList.remove("lit", "warm"));
+    shell.classList.remove("hot");
+  }, 420);
+}
+function play(i, btn) {
+  try {
+    const t = audio().currentTime + 0.005;
+    voice(i, t);
+    live.textContent = ctx.state === "running" ? PADS[i][2] + "." : "Tap the pad again. The browser is waiting.";
+  } catch (e) {
+    live.textContent = "Sound did not start.";
+  }
+  light(btn);
+}
+function paint(look, index) {
+  kit = tune(index);
+  shell.dataset.mode = look.mode;
+  shell.dataset.kick = String(kit.kick);
+  shell.classList.remove("sun", "neon", "ray");
+  shell.classList.add(look.mode);
+  shell.style.setProperty("--key", look.key);
+  shell.style.setProperty("--hot", look.hot);
+  shell.style.setProperty("--rim", look.a);
+  shell.style.setProperty("--glow", look.b + "99");
+  shell.style.setProperty("--ink", look.ink || "#111");
+  shell.style.setProperty("--plate-ink", "#111");
+  shell.style.setProperty("--hot-ink", "#111");
+  if (look.paint === "stripes") {
+    shell.style.background = "repeating-linear-gradient(90deg, " + look.field + " 0 14px, " + look.a + " 14px 16px, " + look.field + " 16px 30px, " + look.b + " 30px 32px)";
+  } else if (look.paint === "grid") {
+    shell.style.background = "repeating-linear-gradient(90deg, transparent 0 18px, " + look.a + " 18px 19px), repeating-linear-gradient(0deg, transparent 0 18px, " + look.b + " 18px 19px) " + look.field;
+  } else if (look.mode === "neon") {
+    shell.style.background = "radial-gradient(circle at 50% 38%, " + look.field + ", #07080c 72%)";
+  } else {
+    shell.style.background = "repeating-conic-gradient(from " + look.ang + "deg at " + look.at + ", " + look.a + " 0 " + look.slice + "deg, " + look.b + " " + look.slice + "deg " + (look.slice * 2) + "deg)";
+  }
+  plate.textContent = look.n;
+  document.getElementById("stamp").textContent = "BONKIT #" + (index + 1);
+  document.title = "BonKit #" + (index + 1) + " — " + look.n;
+}
+PADS.forEach((pad, i) => {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.innerHTML = pad[0] + "<small>" + pad[1] + "</small>";
+  b.setAttribute("aria-label", pad[2]);
+  b.addEventListener("click", () => play(i, b));
+  deck.append(b);
+});
+document.addEventListener("keydown", (e) => {
+  if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+  const pad = KEYMAP[e.key.toLowerCase()];
+  if (pad == null) return;
+  e.preventDefault();
+  play(pad, deck.children[pad]);
+});
+paint(LOOK, LOCK);
+
+</script>
+</body>
+</html>
